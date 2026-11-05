@@ -111,6 +111,17 @@ Results (source at 60° / 20° / 2 m, SNR 30 dB, 4 s):
 | same room | B | 80 / 89 (33 P, 47 D) | 60.0° (58.6–80.0) | 21° (−5…25) | 1.8 m (0.6–3.7) |
 | same room, second source at 220° / 0° / 3 m | B | 55 / 89 | both directions found, but 2 sources in only 28 frames | | |
 
+### `tools/pico_scenario.py`, `tools/pico_check.py`, `pico_emu/`
+Hardware-in-the-loop test with a **Raspberry Pi Pico 2 as 6 emulated PDM microphones**: the ESP32-S3 keeps driving the
+PDM clock, the Pico answers on the 3 data lines with the PDM streams of a `simulate_wav.py` scenario, so the whole live
+path of `daq-detector` (PDM front end, DSP, localization, tracker, BLE) runs against a known source position.
+Wiring ESP32 GPIO4 → Pico GP2 (CLK), GP3/GP4/GP5 → ESP32 GPIO5/6/7 (DATA0..2), common GND. Details: [`pico_emu/README.md`](pico_emu/README.md).
+
+```
+python tools/pico_scenario.py data/sim.wav --port COM9          # load the scenario into the Pico
+python tools/pico_check.py data/sim.wav data/usb_test.wav       # what the ESP32 received vs the scenario
+```
+
 ### `daq_sim/__init__.py`
 Marks `daq_sim` as a Python package (empty).
 
@@ -206,6 +217,7 @@ Excludes virtual environments, caches and data: `data/`, `recordings/`, `output/
 | done | speaker tracking and counting (histogram + tracker, modes AZ / AZEL / ELLIPSE) — ported to firmware 0.7.0 |
 | done | algorithm C (MUSIC on M1–M3, azimuth only) — ported to firmware 0.8.0 |
 | done | simulated evaluation T1–T5 with threshold sweep (`tools/evaluate.py`) |
+| done | Pico 2 PDM emulator for hardware-in-the-loop tests of the live path (`pico_emu/`) |
 | next | the same evaluation on real recordings, choice of the tracker mode and thresholds |
 | later | evaluation on recordings T1–T5 (azimuth/elevation/distance error, counting accuracy) |
 
