@@ -56,10 +56,10 @@ Every mic gets the source with its exact delay and 1/r gain (`src_synth.h`, fixe
 `daq_sim/live.py`), so only parameters travel over USB and the signal is tied to the ESP clock.
 
 `tools/live_source.py` is the front end: a window with the array, the source and its parameters
-(`--port` = the Pico; the **Wiring...** button shows which Pico pin goes to which ESP32 GPIO):
+(the Pico is found automatically; the **Wiring...** button shows which Pico pin goes to which ESP32 GPIO):
 
 ```
-python tools/live_source.py --az 0 --dist 2 --rate 30 --port COM9
+python tools/live_source.py --az 0 --dist 2 --rate 30        # the Pico is found by itself; --port COM9 to choose
 ```
 
 | Command | Effect (`-` in place of a number keeps the current value) |

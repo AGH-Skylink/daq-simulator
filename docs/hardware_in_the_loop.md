@@ -79,8 +79,11 @@ card (recording and `play N` are then unavailable).
 ## Live source window
 
 ```
-python tools/live_source.py --az 0 --dist 2 --rate 30 --port COM9
+python tools/live_source.py --az 0 --dist 2 --rate 30
 ```
+
+The script looks for the Pico itself (USB vendor id 2E8A) and prints the port it found. If there is none it
+prints `Pico not connected` and the window runs as a simulation only. `--port COM9` picks a port by hand.
 
 ![Live source window](img/live_source.png)
 
@@ -90,7 +93,7 @@ python tools/live_source.py --az 0 --dist 2 --rate 30 --port COM9
 - **Mic signals**: the six signals over a few ms with the delay of each mic relative to the array centre.
 - **Sliders and fields**: azimuth, rotation speed, distance, elevation, frequency, amplitude, phase, sweep,
   bursts. Every change is sent to the Pico at once; the fields accept values typed in (Enter).
-- With `--port` the azimuth shown is the one the Pico reports for the signal leaving it (10 reports per
+- With the Pico connected the azimuth shown is the one the Pico reports for the signal leaving it (10 reports per
   second, advanced at the set speed in between). Without a PDM clock from the ESP32 the source stands still
   and the status line says so.
 
@@ -103,7 +106,8 @@ python tools/live_source.py --az 0 --dist 2 --rate 30 --port COM9
 | `--freq`, `--amp`, `--phase` | sinusoid: frequency in Hz, level at the array origin in dBFS, phase in degrees | 500, −12, 0 |
 | `--sweep TO_HZ PERIOD_S` | triangular sweep freq → TO_HZ → freq; `PERIOD_S` 0 = pure tone | 3000, 0.02 |
 | `--burst ON_MS OFF_MS` | bursts; `OFF_MS` 0 = continuous | 800, 500 |
-| `--port` | serial port of the Pico (drives the emulator); without it the window only simulates | — |
+| `--port` | serial port of the Pico, if it should not be searched for | found automatically |
+| `--no-pico` | do not look for the Pico: simulation only | — |
 | `--esp-port` | UART console port of the ESP32: shows the source it reports (status line, once per second) | — |
 | `--config` | `daq-detector/main/config.h` for the mic geometry and the PDM GPIOs | built-in copy |
 | `--wiring` | open the wiring diagram at start | — |
@@ -157,7 +161,7 @@ python tools/pico_check.py data/sim.wav data/usb_test.wav                     # 
    must show `clk 3.072 MHz`, `underruns 0` and both `cpu` loads well below 100 %. `clk none` = no clock on GP2.
 3. **Channel mapping**: `tone 1` … `tone 6` on the Pico; on the ESP32 status line only the level of that mic
    may rise. If M1 and M4 (M2 / M5, M3 / M6) are exchanged, type `swap` on the Pico.
-4. Close the terminal (one program per port) and start `tools/live_source.py --port ...`.
+4. Close the terminal (one program per port) and start `tools/live_source.py`.
 5. On the ESP32 console `vad=1` appears during the bursts and `src az=… el=… d=…` follows the window.
 
 ## Pico console
