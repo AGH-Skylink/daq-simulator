@@ -37,14 +37,46 @@ PIO:   wait CLK high → out 3 bits → wait CLK low → out 3 bits      (edge t
 - Line j carries M(j+1) in the half after the rising edge and M(j+4) after the falling edge (body mics =
   SEL low = left slot, arm mics = SEL high, as `DAQ_MIC_SEL_LEVEL`). If the ESP takes the other half,
   M1..M3 and M4..M6 come out exchanged: `swap` on the console fixes it.
-- Core 0: M1..M3 modulators, packing, USB console; core 1: M4..M6 modulators (~50–60 % each at 200 MHz,
-  shown in the status line).
+- Core 0: source, M1..M3 modulators, packing, USB console; core 1: M4..M6 modulators (load of both cores
+  is shown in the status line; not yet measured on hardware).
 - The scenario (up to ~6 s at 48 kHz) is stored in the Pico flash from 512 kB on and looped.
 
 Checked on the PC with the same C code (`test/host_test.c`, receiver model = split by clock half + sinc⁴
 decimator): the received signal matches the scenario with the same delay on all channels (spread
 0.0001 samples), GCC-PHAT time differences differ by 0.004 µs (median), and `localize_wav.py` gives
 60.0° / 20.1° / 2.01 m on the scenario at 60° / 20° / 2 m.
+
+## Live source (`src` mode)
+
+Besides playing a stored scenario the Pico can synthesize a test source itself: a sinusoid (tone or triangular
+sweep, optional bursts) at a given azimuth / elevation / distance, rotating around the array at a given speed.
+Every mic gets the source with its exact delay and 1/r gain (`src_synth.h`, fixed-point version of
+`daq_sim/live.py`), so only parameters travel over USB and the signal is tied to the ESP clock.
+
+`tools/live_source.py` is the front end: a window with the array, the source and its parameters
+(`--port` = the Pico; the **Wiring...** button shows which Pico pin goes to which ESP32 GPIO):
+
+```
+python tools/live_source.py --az 0 --dist 2 --rate 30 --port COM9
+```
+
+| Command | Effect (`-` in place of a number keeps the current value) |
+|---|---|
+| `src AZ EL DIST RATE` | position (deg, deg, m) and rotation speed (deg/s); switches to the live source |
+| `sig F0 AMP_DBFS PHASE_DEG` | sinusoid: frequency, level at the array origin, phase |
+| `sweep F1 PERIOD_S` | triangular sweep F0 → F1 → F0 (`PERIOD_S` 0 = pure tone) |
+| `burst ON_MS OFF_MS` | bursts (`OFF_MS` 0 = continuous) |
+| `mic N X Y Z`, `c MPS`, `fs HZ` | mic position in mm (as on the ESP console), speed of sound, sample rate |
+| `telem 0\|1` | 10 lines per second `S az el dist rate gate`: the source as it is in the signal leaving the Pico |
+
+Defaults: 500 → 3000 Hz sweep in 20 ms, bursts 800 / 500 ms, −12 dBFS, geometry of `config.h`. The device
+localizes from time differences over 300–3500 Hz and its VAD floor follows a stationary signal, so a
+continuous pure tone is detected for a few seconds only and hardly ever localized (reference algorithm: 22
+of 220 voice frames); the sweep in bursts is localized in every frame.
+
+Checked on the PC: `test/src_test.c` (the firmware code) matches `daq_sim/live.py` within a few LSB, and
+through the PDM model (`test/host_test.c`) the reference algorithm A follows a source rotating at
+30 / −60 / 120 deg/s with a median azimuth error of 0.08° / 0.15° / 0.28°.
 
 ## Build
 
@@ -102,8 +134,11 @@ ninja                                   # -> daq_pico_emu.uf2
 | `main.c` | pipeline (DMA ring, two cores), scenario / tone sources, USB console, upload |
 | `pdm_core.h` | sigma-delta modulator and bit packing (shared with the PC test) |
 | `pdm_emu.pio` | PIO program: 3 bits on every clock edge |
+| `src_synth.h` | live source: moving sinusoid for the six mics (shared with the PC test) |
 | `scenario.h` | flash layout of the scenario (header + PCM) |
 | `test/host_test.c` | PC model: same code + receiver (split by half, sinc⁴ decimator) |
+| `test/src_test.c` | PC run of the live source (raw PCM, compare with `tools/live_source.py --wav`) |
+| `../tools/live_source.py` | window: array, source, parameters, wiring; drives the `src` mode |
 | `../tools/pico_scenario.py` | WAV → Pico (USB upload or UF2) |
 | `../tools/pico_check.py` | received recording vs scenario: mapping, delays, GCC-PHAT |
 

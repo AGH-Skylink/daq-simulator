@@ -122,6 +122,22 @@ python tools/pico_scenario.py data/sim.wav --port COM9          # load the scena
 python tools/pico_check.py data/sim.wav data/usb_test.wav       # what the ESP32 received vs the scenario
 ```
 
+### `tools/live_source.py`, `daq_sim/live.py`
+Live test source with a window: the mic array (geometry of `config.h`), a sound source at a given azimuth / elevation /
+distance rotating at a given speed, the six mic signals with their delays, and all parameters editable while it runs.
+The source is a sinusoid with adjustable frequency, amplitude and phase (tone or sweep, optional bursts). With `--port`
+the Pico 2 emulator synthesizes exactly this source for the ESP32 (`src` mode of `pico_emu`) and the window shows the
+azimuth reported by the Pico; `--esp-port` adds the source the ESP32 reports on its console; **Wiring...** shows the
+Pico pins and the ESP32 GPIOs to connect; `--wav` writes the same signal to a file instead.
+
+```
+python tools/live_source.py --az 0 --dist 2 --rate 30                      # window only
+python tools/live_source.py --az 0 --dist 2 --rate 30 --port COM9          # + Pico 2 emulator -> ESP32
+python tools/live_source.py --az 60 --el 20 --dist 2 --rate 0 --wav data/live.wav
+```
+
+Needs `tkinter` (part of the standard Python installer on Windows; Linux: `python3-tk`).
+
 ### `daq_sim/__init__.py`
 Marks `daq_sim` as a Python package (empty).
 

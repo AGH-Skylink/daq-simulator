@@ -2,8 +2,10 @@
  * daq-sim PDM emulator for the Raspberry Pi Pico 2 (RP2350).
  *
  * Replaces the 6 MEMS microphones of daq-detector: the ESP32-S3 drives the PDM clock (GPIO4) as usual,
- * the Pico answers on the three data lines (GPIO5/6/7) with the PDM bit streams of a scenario
- * recorded by daq-sim (tools/simulate_wav.py -> tools/pico_scenario.py), looped forever.
+ * the Pico answers on the three data lines (GPIO5/6/7) with the PDM bit streams of
+ *   - a scenario recorded by daq-sim (tools/simulate_wav.py -> tools/pico_scenario.py), looped forever, or
+ *   - a live source synthesized here (`src` mode, src_synth.h): a sinusoid moving around the array,
+ *     controlled from tools/live_source.py.
  *
  *   ESP32 GPIO4 (PDM CLK)  -> Pico GP2         ESP32 GPIO5 (DATA0, M1 + M4) <- Pico GP3
  *   ESP32 GPIO6 (DATA1, M2 + M5) <- Pico GP4   ESP32 GPIO7 (DATA2, M3 + M6) <- Pico GP5      GND <-> GND
@@ -18,7 +20,9 @@
  * Work split: core 0 = M1..M3 sigma-delta, packing, USB console; core 1 = M4..M6 sigma-delta.
  *
  * USB console (115200 or any baud, line based): help, play, tone N, silence, swap, gain DB, rewind,
- * quiet, info, upload BYTES (binary scenario upload used by tools/pico_scenario.py --port).
+ * quiet, info, upload BYTES (binary scenario upload used by tools/pico_scenario.py --port), and the live
+ * source: src AZ EL DIST RATE, sig F0 AMP_DBFS PHASE_DEG, sweep F1 PERIOD_S, burst ON_MS OFF_MS,
+ * mic N X Y Z, c MPS, fs HZ, telem 0|1 (`-` in place of a number keeps the current value).
  */
 #include <math.h>
 #include <stdio.h>
@@ -38,8 +42,9 @@
 #include "pdm_core.h"
 #include "pdm_emu.pio.h"
 #include "scenario.h"
+#include "src_synth.h"
 
-#define FW_VERSION      "0.1.0"
+#define FW_VERSION      "0.2.0"
 
 #define PIN_CLK         2            /* from ESP32 GPIO4 */
 #define PIN_DATA0       3            /* GP3, GP4, GP5 -> ESP32 GPIO5, GPIO6, GPIO7 */
@@ -58,7 +63,9 @@
 #define TONE_TABLE      1024
 #define TONE_STEP       ((uint32_t)(1000.0 / 48000.0 * 4294967296.0))   /* 1 kHz at 48 kHz */
 
-typedef enum { MODE_SILENCE, MODE_PLAY, MODE_TONE } mode_t;
+typedef enum { MODE_SILENCE, MODE_PLAY, MODE_TONE, MODE_SRC } mode_t;
+
+#define TELEM_PERIOD_US 100000       /* `S` lines of the live source, 10 per second */
 
 /* ---------- shared state ---------- */
 static uint32_t s_ring[RING_WORDS] __attribute__((aligned(1u << RING_LOG2_BYTES)));
@@ -81,6 +88,8 @@ static int s_tone_mic;               /* 0 = all, 1..6 = only that mic */
 static uint32_t s_tone_phase;
 static bool s_swap;
 static bool s_quiet;
+static bool s_telem;
+static src_t s_src;
 static int s_gain_db;
 
 static const scenario_header_t *s_scen;
@@ -170,6 +179,8 @@ static void fill_pcm(void)
                 s_pcm[f][c] = (s_tone_mic == 0 || s_tone_mic == c + 1) ? v : 0;
             }
         }
+    } else if (s_mode == MODE_SRC) {
+        src_block(&s_src, s_pcm, BLOCK_FRAMES);
     } else {
         memset(s_pcm, 0, sizeof(s_pcm));
     }
@@ -331,6 +342,107 @@ static void print_info(void)
 static void print_help(void)
 {
     printf("commands: play | tone N (1..6, 0 = all) | silence | swap | gain DB | rewind | quiet [0|1] | info | help\n");
+    printf("live source: src AZ EL DIST RATE | sig F0 AMP_DBFS PHASE_DEG | sweep F1 PERIOD_S (0 = off) | "
+           "burst ON_MS OFF_MS (0 = continuous) | mic [N X Y Z] | c MPS | fs HZ | telem 0|1   (- keeps a value)\n");
+}
+
+static void print_src(void)
+{
+    printf("src az %.2f el %.1f dist %.3f m rate %.2f deg/s | sig %.1f Hz %.1f dBFS phase %.1f deg | "
+           "sweep to %.1f Hz in %.3f s | burst %.0f / %.0f ms | c %.1f m/s fs %.0f Hz\n",
+           s_src.az_deg, (double)s_src.el_deg, (double)s_src.dist_m, (double)s_src.rate_dps, (double)s_src.f0_hz,
+           (double)s_src.amp_dbfs, (double)s_src.phase_deg, (double)s_src.f1_hz, (double)s_src.sweep_period_s,
+           (double)s_src.burst_on_ms, (double)s_src.burst_off_ms, (double)s_src.c, (double)s_src.fs);
+}
+
+/* Up to max numbers from arg; a token that is not a number (e.g. `-`) leaves out[i] unchanged */
+static int parse_floats(char *arg, float *out, int max)
+{
+    int n = 0;
+    for (char *tok = arg ? strtok(arg, " ") : NULL; tok && n < max; tok = strtok(NULL, " "), n++) {
+        char *end;
+        float v = strtof(tok, &end);
+        if (end != tok && *end == 0 && isfinite(v)) {
+            out[n] = v;
+        }
+    }
+    return n;
+}
+
+static float clampf(float v, float lo, float hi)
+{
+    return v < lo ? lo : (v > hi ? hi : v);
+}
+
+/* Live source commands; returns false if `cmd` is not one of them */
+static bool handle_src_command(const char *cmd, char *arg)
+{
+    float v[4];
+    if (!strcmp(cmd, "src")) {
+        v[0] = (float)s_src.az_deg, v[1] = s_src.el_deg, v[2] = s_src.dist_m, v[3] = s_src.rate_dps;
+        parse_floats(arg, v, 4);
+        s_src.az_deg = (double)v[0] - 360.0 * floor((double)v[0] / 360.0);
+        s_src.el_deg = clampf(v[1], -89.0f, 89.0f);
+        s_src.dist_m = clampf(v[2], 0.2f, 100.0f);
+        s_src.rate_dps = clampf(v[3], -3600.0f, 3600.0f);
+        if (s_mode != MODE_SRC) {
+            src_restart(&s_src);
+            s_mode = MODE_SRC;
+        }
+    } else if (!strcmp(cmd, "sig")) {
+        v[0] = s_src.f0_hz, v[1] = s_src.amp_dbfs, v[2] = s_src.phase_deg;
+        parse_floats(arg, v, 3);
+        s_src.f0_hz = v[0], s_src.amp_dbfs = clampf(v[1], -120.0f, 0.0f), s_src.phase_deg = v[2];
+    } else if (!strcmp(cmd, "sweep")) {
+        v[0] = s_src.f1_hz, v[1] = s_src.sweep_period_s;
+        parse_floats(arg, v, 2);
+        s_src.f1_hz = v[0], s_src.sweep_period_s = clampf(v[1], 0.0f, 3600.0f);
+    } else if (!strcmp(cmd, "burst")) {
+        v[0] = s_src.burst_on_ms, v[1] = s_src.burst_off_ms;
+        parse_floats(arg, v, 2);
+        s_src.burst_on_ms = clampf(v[0], 1.0f, 60000.0f), s_src.burst_off_ms = clampf(v[1], 0.0f, 60000.0f);
+    } else if (!strcmp(cmd, "mic")) {
+        v[0] = 0;
+        if (parse_floats(arg, v, 4) == 4 && v[0] >= 1 && v[0] <= SRC_NCH) {
+            for (int k = 0; k < 3; k++) {
+                s_src.mic_m[(int)v[0] - 1][k] = clampf(v[k + 1], -400.0f, 400.0f) / 1000.0f;
+            }
+        } else {
+            for (int m = 0; m < SRC_NCH; m++) {
+                printf("mic %d %.1f %.1f %.1f\n", m + 1, (double)s_src.mic_m[m][0] * 1e3, (double)s_src.mic_m[m][1] * 1e3,
+                       (double)s_src.mic_m[m][2] * 1e3);
+            }
+        }
+    } else if (!strcmp(cmd, "c")) {
+        v[0] = s_src.c;
+        parse_floats(arg, v, 1);
+        s_src.c = clampf(v[0], 300.0f, 380.0f);
+    } else if (!strcmp(cmd, "fs")) {
+        v[0] = s_src.fs;
+        parse_floats(arg, v, 1);
+        s_src.fs = clampf(v[0], 8000.0f, 96000.0f);
+    } else if (!strcmp(cmd, "telem")) {
+        s_telem = arg ? atoi(arg) != 0 : !s_telem;
+        return true;
+    } else {
+        return false;
+    }
+    src_update(&s_src);
+    if (!s_telem) {
+        print_src();
+    }
+    return true;
+}
+
+/* `S az el dist rate gate`: where the source is in the signal leaving the Pico now (the ring holds the next
+ * ~10 ms, so the generator is that far ahead); gate = 1 while the burst is on. */
+static void telemetry(void)
+{
+    double ahead_s = (double)(int32_t)(s_written - s_consumed) / PDM_WORDS_PER_FRAME / s_src.fs;
+    double az = s_src.az_deg - s_src.rate_dps * ahead_s;
+    az -= 360.0 * floor(az / 360.0);
+    printf("S %.2f %.1f %.3f %.2f %d\n", az, (double)s_src.el_deg, (double)s_src.dist_m, (double)s_src.rate_dps,
+           s_src.amp > 0);
 }
 
 static void set_gain(int db)
@@ -374,6 +486,8 @@ static void handle_line(char *line)
         print_info();
     } else if (!strcmp(line, "upload")) {
         do_upload(arg ? (uint32_t)strtoul(arg, NULL, 10) : 0);
+    } else if (handle_src_command(line, arg)) {
+        /* live source */
     } else if (line[0]) {
         print_help();
     }
@@ -381,7 +495,7 @@ static void handle_line(char *line)
 
 static void poll_console(void)
 {
-    static char line[64];
+    static char line[96];
     static int len;
     int ch;
     while ((ch = getchar_timeout_us(0)) != PICO_ERROR_TIMEOUT) {
@@ -399,7 +513,7 @@ static void poll_console(void)
 
 static void status(uint32_t dt_us, uint32_t words)
 {
-    static const char *const names[] = { "silence", "play", "tone" };
+    static const char *const names[] = { "silence", "play", "tone", "src" };
     double clk_hz = words * 4.0 * 1e6 / dt_us;   /* 4 PDM cycles per word */
     double c1 = s_c1_busy_us;
     s_c1_busy_us = 0;
@@ -423,6 +537,9 @@ static void status(uint32_t dt_us, uint32_t words)
         }
     } else if (s_mode == MODE_TONE) {
         printf(" M%d", s_tone_mic);
+    } else if (s_mode == MODE_SRC) {
+        printf(" az %.1f el %.0f d %.2f m %+.1f deg/s", s_src.az_deg, (double)s_src.el_deg, (double)s_src.dist_m,
+               (double)s_src.rate_dps);
     }
     printf(" | cpu %.0f%% / %.0f%% | underruns %lu | swap %d gain %d dB\n", load0, load1,
            (unsigned long)s_underruns, s_swap, s_gain_db);
@@ -442,6 +559,7 @@ int main(void)
     }
     build_lut();
     set_gain(0);
+    src_init(&s_src, 48000.0f);
     scenario_load();
     s_mode = s_scen ? MODE_PLAY : MODE_SILENCE;
 
@@ -455,7 +573,7 @@ int main(void)
     s_dma = dma_claim_unused_channel(true);
     pipeline_start();
 
-    uint64_t t_status = time_us_64();
+    uint64_t t_status = time_us_64(), t_telem = t_status;
     while (true) {
         update_consumed();
         if (ring_free() >= BLOCK_WORDS) {
@@ -464,6 +582,13 @@ int main(void)
         }
         poll_console();
         uint64_t now = time_us_64();
+        if (now - t_telem >= TELEM_PERIOD_US) {
+            t_telem = now;
+            if (s_telem && s_mode == MODE_SRC) {
+                update_consumed();
+                telemetry();
+            }
+        }
         if (now - t_status >= 1000000) {
             update_consumed();
             status((uint32_t)(now - t_status), s_consumed - s_consumed_status);
