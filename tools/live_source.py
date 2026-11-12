@@ -87,83 +87,130 @@ def load_pdm_pins(config_h):
 
 
 def open_wiring(root, tk, pins):
-    """Window with the Pico 2 pinout and the five wires to the ESP32-S3-DevKitC-1."""
+    """Window with both boards seen from above (USB up) and the five wires between them."""
     win = tk.Toplevel(root)
-    win.title("Wiring: Pico 2 <-> ESP32-S3")
+    win.title("Wiring: ESP32-S3-DevKitC-1 <-> Pico 2")
     win.configure(bg=BG)
-    w, h = 800, 640
+    w, h = 1060, 690
     c = tk.Canvas(win, width=w, height=h, bg="white", highlightthickness=0)
     c.pack(padx=10, pady=10)
-    small, bold = ("TkDefaultFont", 8), ("TkDefaultFont", 9, "bold")
-    used = {pin: (name, macro, colour, direction) for name, pin, macro, _, colour, direction in WIRES}
+    tiny, small, bold = ("TkDefaultFont", 7), ("TkDefaultFont", 8), ("TkDefaultFont", 9, "bold")
+    pitch = 23
 
-    # ---- Pico 2, seen from above, USB connector up
-    pitch, bx0, bx1, by0 = 23, 520, 690, 60
-    y_of = lambda i: by0 + 50 + i * pitch                      # noqa: E731  (i = 0..19 from the USB end)
-    by1 = y_of(19) + 34
-    c.create_text((bx0 + bx1) / 2, 18, text="Raspberry Pi Pico 2 (top view, USB up)", fill=INK, font=bold)
-    c.create_rectangle(bx0, by0, bx1, by1, fill="#2f9e44", outline="#237032", width=2)
-    c.create_rectangle((bx0 + bx1) / 2 - 26, by0 - 14, (bx0 + bx1) / 2 + 26, by0 + 22, fill="#ced4da", outline="#868e96")
-    c.create_text((bx0 + bx1) / 2, by0 + 4, text="USB", fill=INK, font=small)
-    c.create_rectangle((bx0 + bx1) / 2 - 24, by0 + 290, (bx0 + bx1) / 2 + 24, by0 + 338, fill="#212529", outline="")
-    c.create_text((bx0 + bx1) / 2, by0 + 314, text="RP2350", fill="white", font=small)
-    c.create_oval(bx0 + 52, by0 + 34, bx0 + 68, by0 + 50, fill="#f1f3f5", outline="#868e96")
-    c.create_text(bx0 + 60, by0 + 60, text="BOOTSEL", fill="white", font=("TkDefaultFont", 7))
-    for i in range(20):
-        y = y_of(i)
-        for side, x, label, number in ((0, bx0, PICO_LEFT[i], i + 1), (1, bx1, PICO_RIGHT[i], 40 - i)):
-            wire = used.get(number) if side == 0 else None
-            c.create_rectangle(x - 7, y - 7, x + 7, y + 7, fill=wire[2] if wire else "#e9c46a", outline="#8a6d1b")
-            c.create_text(x + (12 if side == 0 else -12), y, text=label, anchor="w" if side == 0 else "e",
-                          fill="white", font=bold if wire else small)
-            c.create_text(x + (-12 if side == 0 else 12), y, text=str(number), anchor="e" if side == 0 else "w",
-                          fill=INK if wire else MUTED, font=bold if wire else small)
+    def pad(x, y, colour):
+        c.create_rectangle(x - 7, y - 7, x + 7, y + 7, fill=colour or "#e9c46a", outline="#8a6d1b")
 
-    # ---- wires and ESP32 terminals
-    tx0, tx1 = 20, 330
-    c.create_text((tx0 + tx1) / 2, 18, text="ESP32-S3-DevKitC-1 (daq-detector)", fill=INK, font=bold)
-    for name, pin, macro, _, colour, direction in WIRES:
-        y = y_of(pin - 1)
+    # ---- ESP32-S3-DevKitC-1, turned by 180 deg (USB ports up, antenna down) so that header J1 faces the Pico:
+    #      J1 on the right edge with pin 1 at the bottom, J3 on the left edge with pin 1 at the bottom
+    ex0, ex1, ey0 = 60, 240, 50
+    ey_pin1 = ey0 + 56 + 21 * pitch
+    ey1 = ey_pin1 + 62
+    esp_y = lambda k: ey_pin1 - (k - 1) * pitch                # noqa: E731  (k = header pin 1..22)
+    c.create_text((ex0 + ex1) / 2, 16, text="ESP32-S3-DevKitC-1", fill=INK, font=bold)
+    c.create_text((ex0 + ex1) / 2, 32, text="top view, USB ports up, antenna down", fill=MUTED, font=small)
+    c.create_rectangle(ex0, ey0, ex1, ey1, fill="#25262b", outline="#000000", width=2)
+    for i, name in enumerate(("USB", "UART")):                 # the two ports; which one is left depends on the revision
+        x = ex0 + 52 + i * 76
+        c.create_rectangle(x - 22, ey0 - 12, x + 22, ey0 + 20, fill="#ced4da", outline="#868e96")
+    c.create_text((ex0 + ex1) / 2, ey0 + 32, text="2 x USB (labelled USB and UART)", fill="#adb5bd", font=tiny)
+    c.create_rectangle(ex0 + 42, ey1 - 150, ex1 - 42, ey1 - 34, fill="#adb5bd", outline="#868e96")     # module shield
+    c.create_text((ex0 + ex1) / 2, ey1 - 96, text="ESP32-S3\nWROOM-1", fill=INK, font=small, justify="center")
+    c.create_rectangle(ex0 + 42, ey1 - 34, ex1 - 42, ey1 + 14, fill="#343a40", outline="#868e96")       # antenna
+    c.create_text((ex0 + ex1) / 2, ey1 - 10, text="antenna", fill="#ced4da", font=tiny)
+    c.create_text(ex0 - 14, ey1 + 4, text="J3", fill=MUTED, font=bold)
+    c.create_text(ex1 + 14, ey1 + 4, text="J1", fill=INK, font=bold)
+
+    esp_colour = {}                                            # header label -> wire colour
+    for _, _, macro, _, colour, _ in WIRES:
         if macro:
-            gpio = pins[macro]
-            label = str(gpio)
-            where = (f"J1 pin {ESP_J1.index(label) + 1}" if label in ESP_J1 else
-                     f"J3 pin {ESP_J3.index(label) + 1}" if label in ESP_J3 else "not on a header")
-            text = f"GPIO{gpio}  (label \u00ab{label}\u00bb, {where})"
+            esp_colour[str(pins[macro])] = colour
+    gnd_pin = len(ESP_J1)                                      # J1 pin 22 = G, next to the USB ports
+    for k in range(1, 23):
+        y = esp_y(k)
+        for header, x, side in ((ESP_J1, ex1, 1), (ESP_J3, ex0, 0)):
+            label = header[k - 1]
+            colour = esp_colour.get(label)
+            if header is ESP_J1 and k == gnd_pin:
+                colour = WIRES[0][4]
+            pad(x, y, colour)
+            c.create_text(x + (-12 if side else 12), y, text=label, anchor="e" if side else "w",
+                          fill="white", font=bold if colour else small)
+            if side:
+                c.create_text(x + 12, y, text=str(k), anchor="w", fill=INK if colour else MUTED,
+                              font=bold if colour else tiny)
+
+    # ---- Pico 2, USB connector up: pins 1..20 on the left edge, 40..21 on the right edge
+    bx0, bx1, by0 = 560, 730, 50
+    pico_y = lambda i: by0 + 56 + i * pitch                    # noqa: E731  (i = 0..19 from the USB end)
+    by1 = pico_y(19) + 34
+    c.create_text((bx0 + bx1) / 2, 16, text="Raspberry Pi Pico 2", fill=INK, font=bold)
+    c.create_text((bx0 + bx1) / 2, 32, text="top view, USB up", fill=MUTED, font=small)
+    c.create_rectangle(bx0, by0, bx1, by1, fill="#2f9e44", outline="#237032", width=2)
+    c.create_rectangle((bx0 + bx1) / 2 - 26, by0 - 12, (bx0 + bx1) / 2 + 26, by0 + 20, fill="#ced4da", outline="#868e96")
+    c.create_text((bx0 + bx1) / 2, by0 + 4, text="USB", fill=INK, font=small)
+    c.create_rectangle((bx0 + bx1) / 2 - 24, by0 + 296, (bx0 + bx1) / 2 + 24, by0 + 344, fill="#212529", outline="")
+    c.create_text((bx0 + bx1) / 2, by0 + 320, text="RP2350", fill="white", font=small)
+    c.create_oval(bx0 + 52, by0 + 30, bx0 + 68, by0 + 46, fill="#f1f3f5", outline="#868e96")
+    c.create_text(bx0 + 96, by0 + 38, text="BOOTSEL", fill="white", font=tiny)
+    pico_colour = {pin: colour for _, pin, _, _, colour, _ in WIRES}
+    for i in range(20):
+        y = pico_y(i)
+        for side, x, label, number in ((0, bx0, PICO_LEFT[i], i + 1), (1, bx1, PICO_RIGHT[i], 40 - i)):
+            colour = pico_colour.get(number) if side == 0 else None
+            pad(x, y, colour)
+            c.create_text(x + (12 if side == 0 else -12), y, text=label, anchor="w" if side == 0 else "e",
+                          fill="white", font=bold if colour else small)
+            c.create_text(x + (-12 if side == 0 else 12), y, text=str(number), anchor="e" if side == 0 else "w",
+                          fill=INK if colour else MUTED, font=bold if colour else small)
+
+    # ---- wires: out of the ESP32 header, up a lane of its own, into the Pico pin.
+    #      Both headers count away from their pin 1 in opposite directions, so the four signal wires cross once each.
+    rows = []
+    lane = 0
+    for name, pin, macro, _, colour, direction in WIRES:
+        if macro:
+            label = str(pins[macro])
+            if label in ESP_J1:
+                k, x_from, where = ESP_J1.index(label) + 1, ex1 + 26, f"J1 pin {ESP_J1.index(label) + 1}"
+            elif label in ESP_J3:
+                k, x_from, where = ESP_J3.index(label) + 1, ex0 + 8, f"J3 pin {ESP_J3.index(label) + 1}"
+            else:
+                rows.append((colour, f"GPIO{label}: not on a header of the DevKitC-1", name, pin, direction))
+                continue
+            esp_text = f"GPIO{label}  (label \u00ab{label}\u00bb, {where})"
         else:
-            text = "GND  (any pin labelled \u00abG\u00bb)"
-        c.create_rectangle(tx0, y - 10, tx1, y + 10, fill="#f8f9fa", outline=colour, width=2)
-        c.create_text(tx0 + 8, y, text=text, anchor="w", fill=INK, font=bold)
+            k, x_from, esp_text = gnd_pin, ex1 + 26, f"GND  (label \u00abG\u00bb, J1 pin {gnd_pin})"
+        rows.append((colour, esp_text, name, pin, direction))
+        y_from, y_to = esp_y(k), pico_y(pin - 1)
+        x_lane = ex1 + 70 if not macro else bx0 - 60 - 34 * lane
+        lane += 1 if macro else 0
         arrow = {"ESP32 -> Pico": "last", "Pico -> ESP32": "first"}.get(direction, "none")
-        c.create_line(tx1, y, bx0 - 30, y, fill=colour, width=4, arrow=arrow, arrowshape=(12, 14, 6))
-        c.create_text((tx1 + bx0 - 30) / 2, y - 9, text=name, fill=colour, font=small)
+        c.create_line(x_from, y_from, x_lane, y_from, x_lane, y_to, bx0 - 30, y_to, fill=colour, width=4,
+                      arrow=arrow, arrowshape=(12, 14, 6), joinstyle="round")
+        c.create_text(x_from + 24, y_from - 9, text=name, anchor="w", fill=colour, font=small)
 
-    # ---- where the pins are on the DevKitC-1 headers
-    y = y_of(8)
-    c.create_text(tx0, y, anchor="w", fill=INK, font=bold, text="Header J1 of the DevKitC-1, from the antenna end:")
-    labels = {str(pins[macro]): colour for _, _, macro, _, colour, _ in WIRES if macro}
-    for row, (title, header) in enumerate((("J1", ESP_J1), ("J3", ESP_J3))):
-        if row == 1 and not any(v in ESP_J3 for v in labels):
-            continue
-        yy = y + 30 + row * 46
-        c.create_text(tx0, yy, text=title, anchor="w", fill=MUTED, font=bold)
-        for i, label in enumerate(header):
-            x = tx0 + 34 + i * 20
-            colour = labels.get(label) or ("#343a40" if label == "G" and i == len(header) - 1 and row == 0 else None)
-            c.create_rectangle(x - 9, yy - 9, x + 9, yy + 9, fill=colour or "#f1f3f5", outline="#adb5bd")
-            c.create_text(x, yy, text=label, fill="white" if colour else MUTED, font=("TkDefaultFont", 7))
-        c.create_text(tx0 + 34, yy + 18, text="antenna", anchor="w", fill=MUTED, font=small)
-        c.create_text(tx0 + 34 + 21 * 20, yy + 18, text="USB", anchor="e", fill=MUTED, font=small)
-
+    # ---- connection list and notes
+    tx = bx1 + 50
+    c.create_text(tx, 16, text="Connections", anchor="w", fill=INK, font=bold)
+    y = 50
+    for colour, esp_text, name, pin, direction in rows:
+        c.create_rectangle(tx, y - 6, tx + 12, y + 6, fill=colour, outline="")
+        c.create_text(tx + 20, y, anchor="w", fill=INK, font=bold, text=name)
+        c.create_text(tx + 20, y + 16, anchor="w", fill=INK, font=small, text=f"ESP32  {esp_text}")
+        c.create_text(tx + 20, y + 30, anchor="w", fill=INK, font=small,
+                      text=f"Pico     pin {pin}  ({PICO_LEFT[pin - 1]})")
+        c.create_text(tx + 20, y + 44, anchor="w", fill=MUTED, font=small, text=direction)
+        y += 70
     notes = ["Before powering up:",
              "\u2022 unplug the microphones' DAT wires from the ESP32 (they would drive the same lines),",
              "\u2022 leave the SEL GPIOs of the ESP32 unconnected,",
              "\u2022 do not connect 3V3 or 5V between the boards: each one has its own USB cable,",
              "\u2022 keep the five wires short (under 15 cm).",
              "",
-             "The pin numbers of the Pico are counted from the USB end, left column 1..20.",
-             "Go by the labels printed on the ESP32 board, not by position."]
-    c.create_text(tx0, y_of(13) + 6, anchor="nw", fill=INK, font=("TkDefaultFont", 9), text="\n".join(notes), width=470)
+             "Pico pins are counted from the USB end, left column 1..20.",
+             "On the ESP32 go by the labels printed next to the pins: J1 is the header "
+             "that starts with 3V3, 3V3, RST at the antenna end."]
+    c.create_text(tx, y + 6, anchor="nw", fill=INK, font=("TkDefaultFont", 9), text="\n".join(notes), width=w - tx - 12)
     return win
 
 

@@ -1,10 +1,14 @@
-# daq-sim
+# daq-simulator
 
 PC side of the **Audio Detection System** (6-microphone speaker localization on ESP32-S3):
 - tools for receiving and loading recordings from `daq-detector`,
 - simulation and offline development of the localization algorithms in Python (reference implementations that the firmware must match).
 
-The best algorithm is later ported to C in `daq-detector`.
+- hardware-in-the-loop test of the device: a Raspberry Pi Pico 2 emulates the six PDM microphones and a window on the PC
+  moves a sound source around the array. Guide with wiring and first run: [`docs/hardware_in_the_loop.md`](docs/hardware_in_the_loop.md).
+
+The best algorithm is later ported to C in `daq-detector`. This repository continues `daq-sim` (same Python package
+`daq_sim`, same tools) and adds the emulator.
 
 ## Setup
 
