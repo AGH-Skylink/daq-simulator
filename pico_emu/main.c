@@ -13,7 +13,7 @@
  * Signal path (one PCM sample = 64 PDM clock cycles, so the sample rate follows the ESP clock):
  *   scenario (flash, int16 M1..M6) -> gain -> linear interpolation x64 -> 2nd-order sigma-delta per mic
  *   -> 64-bit masks -> packed into 24-bit words (3 lines x 8 clock halves) -> endless DMA ring -> PIO.
- *   Line j carries M(j+1) in the half after the falling edge and M(j+4) after the rising edge
+ *   Line j carries M(j+1) in the half after the rising edge and M(j+4) after the falling edge
  *   (body mics = SEL low = left slot, arm mics = SEL high = right slot, like DAQ_MIC_SEL_LEVEL);
  *   `swap` exchanges the halves if the ESP samples the other way round (tap test: `tone N`).
  *
@@ -44,7 +44,7 @@
 #include "scenario.h"
 #include "src_synth.h"
 
-#define FW_VERSION      "0.2.2"
+#define FW_VERSION      "0.2.3"
 
 #define PIN_CLK         2            /* from ESP32 GPIO4 */
 #define PIN_DATA0       3            /* GP3, GP4, GP5 -> ESP32 GPIO5, GPIO6, GPIO7 */
@@ -474,7 +474,7 @@ static void handle_line(char *line)
     } else if (!strcmp(line, "swap")) {
         s_swap = !s_swap;
         build_lut();
-        printf("swap %d: M1..M3 after the %s edge\n", s_swap, s_swap ? "rising" : "falling (as SEL low mics)");
+        printf("swap %d: M1..M3 after the %s edge\n", s_swap, s_swap ? "falling" : "rising (default)");
     } else if (!strcmp(line, "gain")) {
         set_gain(arg ? atoi(arg) : 0);
         printf("gain %d dB\n", s_gain_db);
