@@ -113,6 +113,40 @@ prints `Pico not connected` and the window runs as a simulation only. `--port CO
 | `--wiring` | open the wiring diagram at start | — |
 | `--wav FILE`, `--seconds` | no window: write the six mic signals of this source to a WAV | — |
 
+### Example run
+
+Source starting at azimuth 0°, 2 m away, going round at 30 degrees per second, with the wiring diagram open:
+
+```
+> python tools/live_source.py --az 0 --dist 2 --rate 30 --wiring
+Pico found on COM7
+```
+
+The window opens, the source dot moves counter-clockwise (a full turn in 12 s) and the bottom line shows the
+state of the Pico, e.g. `Pico: clk 3.072 MHz (fs 48000 Hz) | src az 41.3 el 0 d 2.00 m +30.0 deg/s | cpu … | underruns 0`.
+On the ESP32 console (`idf.py monitor`) the status line should then show `vad=1` during the bursts and
+`src az=…` following the azimuth in the window (expected behaviour, not yet confirmed on hardware).
+
+Without a Pico the same command prints
+
+```
+Pico not connected: no serial port of a Raspberry Pi Pico found (plug it in without BOOTSEL, with the pico_emu firmware). Running as a simulation only.
+```
+
+and the window runs on its own (status line: `Pico not connected: simulation only, nothing is sent.`).
+
+More examples:
+
+```
+python tools/live_source.py --az 90 --dist 1.5 --rate 0 --el 20              # source standing at 90 deg, 20 deg up
+python tools/live_source.py --az 0 --dist 3 --rate -60                       # clockwise, 60 deg/s
+python tools/live_source.py --az 0 --dist 2 --rate 30 --freq 1000 --sweep 1000 0 --burst 800 0    # pure continuous 1 kHz tone
+python tools/live_source.py --az 0 --dist 2 --rate 30 --esp-port COM5        # + the source reported by the ESP32
+python tools/live_source.py --az 0 --dist 2 --rate 30 --config C:\esp\daq-detector\main\config.h   # geometry and pins of the firmware
+python tools/live_source.py --az 60 --el 20 --dist 2 --rate 0 --wav data/live.wav --seconds 6      # no window: WAV
+python tools/localize_wav.py data/live.wav                                   # reference algorithm on that WAV
+```
+
 ### Which signal the detector can localize
 
 The detector takes time differences from the whole 300–3500 Hz band (GCC-PHAT) and its VAD compares the
