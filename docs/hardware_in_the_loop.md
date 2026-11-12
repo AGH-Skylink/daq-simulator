@@ -56,7 +56,8 @@ The ESP32 stays the PDM master: it drives the clock, the Pico answers on the thr
   Pico pins are counted from the USB end, left column 1..20.
 - Unplug the DAT wires of the microphones from the ESP32, they would drive the same lines.
 - The SEL GPIOs of the ESP32 (17, 18, 8, 9, 14, 21) stay unconnected: the emulator puts M1..M3 in the half
-  after the rising clock edge and M4..M6 after the falling edge, as `DAQ_MIC_SEL_LEVEL` does.
+  after the falling clock edge and M4..M6 after the rising edge, as microphones with SEL low / high do
+  (`DAQ_MIC_SEL_LEVEL`).
 - Do not connect 3V3 or 5V between the boards; each one is powered from its own USB (or the UPS HAT).
 
 ## Firmware
@@ -256,4 +257,4 @@ Status line, once per second:
 | `pico_emu/pdm_emu.pio` | PIO program: 3 bits on every clock edge |
 | `pico_emu/scenario.h` | flash layout of a stored scenario |
 | `pico_emu/test/` | PC runs of the firmware code (`host_test.c`, `src_test.c`) |
-| `pico_emu/prebuilt/daq_pico_emu.uf2` | firmware 0.2.0 ready to copy to the Pico |
+| `pico_emu/prebuilt/daq_pico_emu.uf2` | firmware 0.2.1 ready to copy to the Pico |

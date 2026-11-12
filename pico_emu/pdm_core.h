@@ -62,13 +62,15 @@ static void PDM_RAMFUNC(sd_block)(sd_state_t *s, const int16_t *x, int n, uint32
 
 /*
  * Mic m's nibble (4 PDM cycles) -> its bits in a FIFO word. Word bit 3k + line = clock half k
- * (even k: after the rising edge). Line j = m % 3 carries M(j+1) in the first half of every cycle and
- * M(j+4) in the second (swap exchanges them).
+ * (even k: after the rising edge, odd k: after the falling edge). Like the real microphones (ST AN5027:
+ * select pin low = data valid while CLK is low, select high = valid while CLK is high), line j = m % 3 carries
+ * M(j+1) (SEL low, left slot of the ESP32) after the falling edge and M(j+4) (SEL high, right slot) after the
+ * rising edge; the receiver samples each on the following edge. swap exchanges the two halves.
  */
 static inline void pdm_build_lut(uint32_t lut[PDM_NCH][16], bool swap)
 {
     for (int m = 0; m < PDM_NCH; m++) {
-        int line = m % 3, second = (m >= 3) ^ (swap ? 1 : 0);
+        int line = m % 3, second = (m < 3) ^ (swap ? 1 : 0);
         for (int n = 0; n < 16; n++) {
             uint32_t v = 0;
             for (int k = 0; k < 4; k++) {
