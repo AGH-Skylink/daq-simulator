@@ -1,15 +1,17 @@
 """Live test source for daq-detector: a window with the mic array and a sound source moving around it.
 
-    python tools/live_source.py --az 0 --dist 2 --rate 30                    # window only (simulation)
-    python tools/live_source.py --az 0 --dist 2 --rate 30 --port COM9        # + drive the Pico 2 emulator
+    python tools/live_source.py --az 0 --dist 2 --rate 30                    # finds the Pico 2 by itself
+    python tools/live_source.py --az 0 --dist 2 --rate 30 --port COM9        # or: the Pico on a given port
+    python tools/live_source.py --az 0 --dist 2 --rate 30 --no-pico          # window only (simulation)
     python tools/live_source.py --az 60 --dist 2 --rate 0 --wav data/live.wav --seconds 10   # same signal to a WAV
 
 The source is a sinusoid (tone or sweep, optional bursts) at (azimuth, elevation, distance), its azimuth
-advancing by `rate` degrees per second. With --port the Pico 2 running pico_emu synthesizes exactly this
+advancing by `rate` degrees per second. With the Pico 2 running pico_emu connected, it synthesizes exactly this
 source for the six microphones (`src` mode, model: daq_sim/live.py) and feeds it to the ESP32 as PDM; the
 window then shows the azimuth reported by the Pico, i.e. what is in the signal right now. Every change in
-the window (sliders, fields) is sent to the Pico immediately. Without --port the window runs the same model
-on the PC clock. --esp-port adds what the device reports on its UART console (status line, once per second).
+the window (sliders, fields) is sent to the Pico immediately. The Pico is found by its USB id; if none is
+connected the script says so and the window runs the same model on the PC clock. --esp-port adds what
+the device reports on its UART console (status line, once per second).
 
 The device localizes from time differences over 300-3500 Hz and its VAD needs pauses, so the defaults are
 a 500 -> 3000 Hz sweep (20 ms) in bursts (0.8 s on / 0.5 s off); a pure continuous tone is not localizable.
@@ -263,6 +265,15 @@ def open_port(port, option):
         sys.exit(f"{option} {port}: cannot open the port ({e}).\nPorts on this computer:\n"
                  + ("\n".join(ports) if ports else "  none (is the board plugged in?)")
                  + "\nWithout --port the window runs as a simulation only.")
+
+
+def find_pico():
+    """Serial port of a Raspberry Pi Pico (USB vendor id 2E8A), or None. In BOOTSEL mode the Pico has no port."""
+    from serial.tools import list_ports
+    ports = [p.device for p in list_ports.comports() if p.vid == 0x2E8A]
+    if len(ports) > 1:
+        print(f"several Picos found ({', '.join(ports)}), using {ports[0]}; choose another one with --port")
+    return ports[0] if ports else None
 
 
 def triggered_waves(p, tau_s, gain, n=260):
@@ -734,7 +745,7 @@ class App:
                 lines.append(f"ESP32   no source reported   {self.esp_spk}")
         self.readout.configure(text="\n".join(lines))
         if not self.pico:
-            status = "Simulation only (no --port): nothing is sent to the Pico."
+            status = "Pico not connected: simulation only, nothing is sent."
         elif not live and self.sound:
             status = f"Pico: no telemetry, source frozen ({self.pico_status or 'no status yet'})"
         else:
@@ -773,7 +784,8 @@ def main():
                     default=[d.sweep_to_hz, d.sweep_period_s], help="triangular sweep freq -> TO_HZ -> freq (PERIOD_S 0 = pure tone)")
     ap.add_argument("--burst", nargs=2, type=float, metavar=("ON_MS", "OFF_MS"),
                     default=[d.burst_on_ms, d.burst_off_ms], help="bursts (OFF_MS 0 = continuous)")
-    ap.add_argument("--port", help="USB serial port of the Pico 2 running pico_emu (drives the emulator)")
+    ap.add_argument("--port", help="USB serial port of the Pico 2 running pico_emu (default: found automatically)")
+    ap.add_argument("--no-pico", action="store_true", help="do not look for the Pico: simulation only")
     ap.add_argument("--esp-port", help="UART console port of the ESP32 (shows the source it reports)")
     ap.add_argument("--config", help="daq-detector/main/config.h to take the mic geometry from")
     ap.add_argument("--wiring", action="store_true", help="open the wiring diagram (Pico 2 <-> ESP32) at start")
@@ -793,7 +805,15 @@ def main():
 
     import tkinter as tk
     from tkinter import ttk
-    pico = open_port(args.port, "--port") if args.port else None
+    port = args.port
+    if not port and not args.no_pico:
+        port = find_pico()
+        if port:
+            print(f"Pico found on {port}")
+        else:
+            print("Pico not connected: no serial port of a Raspberry Pi Pico found "
+                  "(plug it in without BOOTSEL, with the pico_emu firmware). Running as a simulation only.")
+    pico = open_port(port, "--port") if port else None
     esp = open_port(args.esp_port, "--esp-port") if args.esp_port else None
     root = tk.Tk()
     app = App(root, tk, ttk, geometry, params, pico, esp, load_pdm_pins(args.config))
