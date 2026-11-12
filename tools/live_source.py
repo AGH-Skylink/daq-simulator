@@ -763,6 +763,7 @@ class App:
 
 
 def write_wav(path, samples, fs):
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
     with wave.open(str(path), "wb") as w:
         w.setnchannels(samples.shape[1])
         w.setsampwidth(2)
