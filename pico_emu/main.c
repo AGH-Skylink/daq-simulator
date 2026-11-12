@@ -44,7 +44,7 @@
 #include "scenario.h"
 #include "src_synth.h"
 
-#define FW_VERSION      "0.2.1"
+#define FW_VERSION      "0.2.2"
 
 #define PIN_CLK         2            /* from ESP32 GPIO4 */
 #define PIN_DATA0       3            /* GP3, GP4, GP5 -> ESP32 GPIO5, GPIO6, GPIO7 */

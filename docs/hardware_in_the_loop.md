@@ -235,6 +235,7 @@ Status line, once per second:
 | Symptom | Cause / fix |
 |---|---|
 | `could not open port` | wrong port (Bluetooth COM ports give "semaphore timeout") or a terminal still holds it; list ports with `python -m serial.tools.list_ports -v`, the Pico has `VID:PID=2E8A:…` |
+| Pico shows a clock above the ESP32's (e.g. `clk 3.377 MHz` instead of 3.072) | the Pico only counts the edges it receives, so it sees extra ones: ringing on the CLK wire. Shorter wires, GND wire next to CLK, 33–100 Ω in series at the ESP32 end; firmware ≥ 0.2.2 ignores the input for 75 ns after each edge |
 | Pico: `clk none` | no clock on GP2: wire GPIO4 → pin 4, common ground, ESP32 firmware running |
 | ESP32 levels at the noise floor | DATA wires, or the microphones are still connected |
 | M1..M3 and M4..M6 exchanged | `swap` on the Pico |
@@ -257,4 +258,4 @@ Status line, once per second:
 | `pico_emu/pdm_emu.pio` | PIO program: 3 bits on every clock edge |
 | `pico_emu/scenario.h` | flash layout of a stored scenario |
 | `pico_emu/test/` | PC runs of the firmware code (`host_test.c`, `src_test.c`) |
-| `pico_emu/prebuilt/daq_pico_emu.uf2` | firmware 0.2.1 ready to copy to the Pico |
+| `pico_emu/prebuilt/daq_pico_emu.uf2` | firmware 0.2.2 ready to copy to the Pico |
