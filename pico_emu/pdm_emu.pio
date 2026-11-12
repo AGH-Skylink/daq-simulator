@@ -9,12 +9,19 @@
 ; rising edge, odd k: after the falling edge). The edge-to-output latency is ~4 system clocks
 ; (2 for the input synchronizer, 1 for wait, 1 for out), about 20 ns at 200 MHz.
 
+;
+; After every edge the clock input is ignored for HOLDOFF system clocks (75 ns at 200 MHz, less than half
+; a clock period up to ~5 MHz): ringing on the jumper wire right after an edge would otherwise be taken
+; for further edges, which shifts the bit stream (the Pico status then shows a clock above the real one).
+
+.define HOLDOFF 14
+
 .program pdm_emu
 .wrap_target
-    wait 1 pin 0        ; rising edge of CLK
-    out pins, 3         ; first half of the cycle
-    wait 0 pin 0        ; falling edge of CLK
-    out pins, 3         ; second half of the cycle
+    wait 1 pin 0            ; rising edge of CLK
+    out pins, 3 [HOLDOFF]   ; first half of the cycle
+    wait 0 pin 0            ; falling edge of CLK
+    out pins, 3 [HOLDOFF]   ; second half of the cycle
 .wrap
 
 % c-sdk {
