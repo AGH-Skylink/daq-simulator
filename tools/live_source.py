@@ -252,6 +252,19 @@ class SerialLines(threading.Thread):
             pass
 
 
+def open_port(port, option):
+    """SerialLines on `port`, or exit with the list of ports that do exist."""
+    import serial
+    from serial.tools import list_ports
+    try:
+        return SerialLines(port)
+    except serial.SerialException as e:
+        ports = [f"  {p.device:8s} {p.description}" + ("   <- Pico" if p.vid == 0x2E8A else "") for p in list_ports.comports()]
+        sys.exit(f"{option} {port}: cannot open the port ({e}).\nPorts on this computer:\n"
+                 + ("\n".join(ports) if ports else "  none (is the board plugged in?)")
+                 + "\nWithout --port the window runs as a simulation only.")
+
+
 def triggered_waves(p, tau_s, gain, n=260):
     """Mic signals for the scope panel, triggered at the start of a sweep (or at phase 0 of a tone):
     returns (t_ms, x[6, n]) with x_m(t) = gain_m sin(2 pi P(t - tau_m) + phase)."""
@@ -780,8 +793,8 @@ def main():
 
     import tkinter as tk
     from tkinter import ttk
-    pico = SerialLines(args.port) if args.port else None
-    esp = SerialLines(args.esp_port) if args.esp_port else None
+    pico = open_port(args.port, "--port") if args.port else None
+    esp = open_port(args.esp_port, "--esp-port") if args.esp_port else None
     root = tk.Tk()
     app = App(root, tk, ttk, geometry, params, pico, esp, load_pdm_pins(args.config))
     if args.wiring:
