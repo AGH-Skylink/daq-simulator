@@ -6,6 +6,8 @@ streams. The ESP32-S3 runs its normal firmware (acquisition, DSP, localization, 
 live path is tested against a known ground truth, PDM front end included — unlike the SD replay mode,
 which starts after the PDM decoder.
 
+Step-by-step guide with the wiring drawing and the live source window: [`../docs/hardware_in_the_loop.md`](../docs/hardware_in_the_loop.md).
+
 ## Wiring
 
 The ESP32-S3 stays the PDM master: it drives the clock, the Pico answers on the data lines.
@@ -91,7 +93,8 @@ ninja                                   # -> daq_pico_emu.uf2
 
 ## Use
 
-1. **Firmware** (once): hold BOOTSEL on the Pico, plug it in, copy `daq_pico_emu.uf2` to the `RP2350` drive.
+1. **Firmware** (once): hold BOOTSEL on the Pico, plug it in, copy `daq_pico_emu.uf2` (built, or `prebuilt/daq_pico_emu.uf2`)
+   to the `RP2350` drive.
 2. **Scenario:**
    ```
    python tools/simulate_wav.py data/sim.wav --source 60 20 2.0 --seconds 5
