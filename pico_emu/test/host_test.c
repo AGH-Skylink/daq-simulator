@@ -45,12 +45,12 @@ int main(int argc, char **argv)
 
         for (int w = 0; w < BLOCK * PDM_WORDS_PER_FRAME; w++) {
             for (int cyc = 0; cyc < 4; cyc++) {
-                /* the receiver takes mic j+1 (left slot, SEL low) from the half after the falling edge and
-                 * mic j+4 (right slot, SEL high) from the half after the rising edge */
+                /* the receiver takes mic j+1 (left slot) from the half after the rising edge and mic j+4
+                 * (right slot) from the half after the falling edge, as measured on the ESP32-S3 */
                 int bits[PDM_NCH];
                 for (int line = 0; line < 3; line++) {
-                    bits[line] = words[w] >> (3 * (2 * cyc + 1) + line) & 1;
-                    bits[line + 3] = words[w] >> (3 * (2 * cyc) + line) & 1;
+                    bits[line] = words[w] >> (3 * (2 * cyc) + line) & 1;
+                    bits[line + 3] = words[w] >> (3 * (2 * cyc + 1) + line) & 1;
                 }
                 for (int c = 0; c < PDM_NCH; c++) {
                     int64_t v = bits[c] ? 1 : -1;

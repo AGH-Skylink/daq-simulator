@@ -31,17 +31,18 @@ The ESP32-S3 stays the PDM master: it drives the clock, the Pico answers on the 
 ```
 flash: scenario (int16 M1..M6) ─▶ gain ─▶ x64 linear interpolation ─▶ 2nd-order sigma-delta per mic
        ─▶ 64-bit masks ─▶ 24-bit words (3 lines × 8 clock halves) ─▶ endless DMA ring (32 kB) ─▶ PIO
-PIO:   wait CLK high → out 3 bits (M4..M6) → wait CLK low → out 3 bits (M1..M3)      (edge to output ≈ 20 ns at 200 MHz)
+PIO:   wait CLK high → out 3 bits (M1..M3) → wait CLK low → out 3 bits (M4..M6)      (edge to output ≈ 20 ns at 200 MHz,
+       then the clock input is ignored for 75 ns)
 ```
 
 - One PCM sample = 64 PDM clock cycles, so the sample rate follows the ESP clock (48 kHz by default; a
   32 kHz firmware works with a 32 kHz scenario).
 - Clock: the Pico has no sample clock of its own. The PIO outputs one bit per line after every edge of the
   ESP clock, so the bit rate is the ESP clock exactly (no drift); the receiver samples it on the next edge.
-- Line j carries M(j+1) in the half after the falling edge and M(j+4) after the rising edge, like the real
-  microphones (ST AN5027: select low = data valid while CLK is low; ESP-IDF: left slot = select pulled down;
-  body mics = SEL low, arm mics = SEL high, as `DAQ_MIC_SEL_LEVEL`). If the channels still come out
-  exchanged (M1..M3 ↔ M4..M6), `swap` on the console exchanges the halves.
+- Line j carries M(j+1) in the half after the rising edge and M(j+4) after the falling edge. This is what
+  `daq-detector` 0.8.0 on the ESP32-S3 needs to see M1..M3 in channels 1..3 (measured, see
+  `docs/hardware_in_the_loop.md`); the other way round, which ST AN5027 suggests for microphones with the
+  select pin low, exchanged M1..M3 and M4..M6. `swap` on the console exchanges the halves.
 - Core 0: source, M1..M3 modulators, packing, USB console; core 1: M4..M6 modulators (load of both cores
   is shown in the status line; not yet measured on hardware).
 - The scenario (up to ~6 s at 48 kHz) is stored in the Pico flash from 512 kB on and looped.

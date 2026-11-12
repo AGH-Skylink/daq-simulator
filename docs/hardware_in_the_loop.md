@@ -23,10 +23,21 @@ Two sources are available on the Pico:
 
 ## Status
 
-Checked on a PC only, with the same C code that runs on the Pico (`pico_emu/test/`) and a model of the PDM
-receiver. **Not yet run on hardware**: the edge-to-output timing of the PIO program, the CPU load of the
-Pico (shown in its status line) and the reading of the ESP32 console by `--esp-port` still have to be
-confirmed on the bench. Results of the PC checks are at the end of this file.
+First runs on hardware, 12.11.2026 (detection logs `daq-detector/recordings/det_20261112_*.csv`, ESP32 firmware
+0.8.0, live source at 2 m, 30 deg/s, sweep in bursts 800 / 500 ms):
+
+| Pico firmware | What the ESP32 log shows |
+|---|---|
+| 0.2.0 | Pico ran 10 % fast: burst period 1.177 s instead of 1.300 s, rotation 33.2 instead of 30 deg/s, noise floor +19 dB in the pauses. Cause: ringing on the CLK wire counted as extra clock edges (PDM bits skipped). Channel mapping correct. |
+| 0.2.2 (input ignored for 75 ns after each edge) | clock locked: burst period 1.298 s, rotation 30.05–30.10 deg/s, pauses at −52 dB; time differences fit the model at elevation 0°, 2 m, azimuth within 0.7° rms of a constant-rate line. But M1..M3 and M4..M6 were exchanged (the half assignment changed in 0.2.1 was wrong for this ESP32), so the device reported no source. |
+| 0.2.3 | halves as in 0.2.0, hold-off as in 0.2.2. **Not yet run.** |
+
+Open points:
+- in the 0.2.2 log the azimuth seen by the ESP32 jumps by exactly +120° about twice a minute, always during a
+  pause; a jump of one data line (M1 → M2 → M3). The same log has 153 gaps in the frame counter of the ESP32.
+  Whether the line shift happens in the ESP32 (lost data in the I2S receiver) or in the Pico is not known yet:
+  compare `drop dma` / `drop dsp` on the ESP32 status line with `underruns` on the Pico,
+- CPU load of the Pico and `--esp-port` have not been looked at on hardware.
 
 ## What you need
 
@@ -56,8 +67,8 @@ The ESP32 stays the PDM master: it drives the clock, the Pico answers on the thr
   Pico pins are counted from the USB end, left column 1..20.
 - Unplug the DAT wires of the microphones from the ESP32, they would drive the same lines.
 - The SEL GPIOs of the ESP32 (17, 18, 8, 9, 14, 21) stay unconnected: the emulator puts M1..M3 in the half
-  after the falling clock edge and M4..M6 after the rising edge, as microphones with SEL low / high do
-  (`DAQ_MIC_SEL_LEVEL`).
+  after the rising clock edge and M4..M6 after the falling edge (measured: this is what puts M1..M3 into
+  channels 1..3 of `daq-detector` 0.8.0; `swap` on the Pico exchanges the halves).
 - Do not connect 3V3 or 5V between the boards; each one is powered from its own USB (or the UPS HAT).
 
 ## Firmware
@@ -258,4 +269,4 @@ Status line, once per second:
 | `pico_emu/pdm_emu.pio` | PIO program: 3 bits on every clock edge |
 | `pico_emu/scenario.h` | flash layout of a stored scenario |
 | `pico_emu/test/` | PC runs of the firmware code (`host_test.c`, `src_test.c`) |
-| `pico_emu/prebuilt/daq_pico_emu.uf2` | firmware 0.2.2 ready to copy to the Pico |
+| `pico_emu/prebuilt/daq_pico_emu.uf2` | firmware 0.2.3 ready to copy to the Pico |
